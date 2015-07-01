@@ -62,6 +62,20 @@ func Generate(image string, overwrite bool) (err error) {
 				}
 			}
 		}
+	} else {
+		image_file_path := folder_path + "/" + image
+		if exists(image_file_path) {
+			if isImage(image_file_path) {
+				err = generateThumbnail(image_file_path, overwrite)
+				if err != nil {
+					return err
+				}
+			} else {
+				return errors.New("That file is not an image")
+			}
+		} else {
+			return errors.New("That file doesn't exist")
+		}
 	}
 
 	return err

@@ -6,20 +6,22 @@ import (
 	"github.com/jempe/thumbnails"
 )
 
-var config_file = flag.String("config", "/home/kastro/Documents/thumbnails/thumbnails.json", "config file location")
+var config_file = flag.String("config", "thumbnails.json", "config file location")
+var image_file = flag.String("image", "", "image file name")
 
 func main() {
 	flag.Parse()
 	config := *config_file
+	image := *image_file
 
 	err := thumbnails.Config(config)
 	if err != nil {
-		panic(fmt.Errorf("Fatal error config file: %s \n", err))
-	}
+		fmt.Printf("Error: %s\n", err)
+	} else {
+		err = thumbnails.Generate(image, true)
 
-	err = thumbnails.Generate("", true)
-
-	if err != nil {
-		panic(fmt.Errorf("Error generating thumbnails: %s \n", err))
+		if err != nil {
+			fmt.Printf("Generate thumbnails error: %s\n", err)
+		}
 	}
 }
