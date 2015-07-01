@@ -2,11 +2,12 @@ package thumbnails
 
 import (
 	"errors"
+	"github.com/nfnt/resize"
 	"github.com/spf13/viper"
 	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"io/ioutil"
 	"log"
@@ -70,6 +71,13 @@ func Generate(image string, overwrite bool) (err error) {
 func generateThumbnail(image_file string, overwrite bool) error {
 	var err error
 	if isDirectory(thumbs_path) {
+		source_image := folder_path + "/" + image_file
+
+		mime, err := getContentType(source_image)
+		if err != nil {
+			return err
+		}
+
 		for thumb_folder, thumb_size := range thumb_sizes {
 			thumb_folder_path := thumbs_path + "/" + thumb_folder
 			if !exists(thumb_folder_path) {
@@ -91,12 +99,61 @@ func generateThumbnail(image_file string, overwrite bool) error {
 				if exists(thumb_file_path) && overwrite == false {
 					log.Printf("Nothing to do, thumb %s already exists\n", thumb_file_path)
 				} else {
-					err = copyImage(folder_path+"/"+image_file, thumb_file_path)
+					var img image.Image
+
+					file, err := os.Open(source_image)
 					if err != nil {
 						return err
 					}
 
-					log.Printf("resize %s %dx%d exact: %t\n", thumb_file_path, width, height, exact_size)
+					if mime == "image/jpeg" {
+						img, err = jpeg.Decode(file)
+						if err != nil {
+							return err
+						}
+					} else if mime == "image/gif" {
+						img, err = gif.Decode(file)
+						if err != nil {
+							return err
+						}
+					} else if mime == "image/png" {
+						img, err = png.Decode(file)
+						if err != nil {
+							return err
+						}
+					}
+
+					file.Close()
+
+					var resized_image image.Image
+
+					if exact_size {
+						// img_width, img_height, err := getImageDimension(source_image)
+						// if err != nil {
+						// 	return err
+						// }
+						resized_image = resize.Thumbnail(uint(width), uint(height), img, resize.Lanczos3)
+					} else {
+						resized_image = resize.Thumbnail(uint(width), uint(height), img, resize.Lanczos3)
+					}
+
+					out, err := os.Create(thumb_file_path)
+					if err != nil {
+						return err
+					}
+
+					defer out.Close()
+
+					if mime == "image/jpeg" {
+						jpeg.Encode(out, resized_image, nil)
+					} else if mime == "image/gif" {
+						var opt gif.Options
+						opt.NumColors = 256
+
+						gif.Encode(out, resized_image, &opt)
+					} else if mime == "image/png" {
+						png.Encode(out, resized_image)
+					}
 				}
 			} else {
 				return errors.New("Can't create thumbnails. " + thumb_folder_path + " must be a directory")
@@ -115,6 +172,8 @@ func getImageDimensions(imagePath string) (width int, height int, err error) {
 		err = file_err
 		return
 	}
+
+	defer file.Close()
 
 	image, _, image_err := image.DecodeConfig(file)
 	if image_err != nil {
