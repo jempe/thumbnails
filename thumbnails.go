@@ -2,6 +2,7 @@ package thumbnails
 
 import (
 	"errors"
+	"github.com/oliamb/cutter"
 	"github.com/nfnt/resize"
 	"github.com/spf13/viper"
 	"image"
@@ -128,11 +129,34 @@ func generateThumbnail(image_file string, overwrite bool) error {
 					var resized_image image.Image
 
 					if exact_size {
-						// img_width, img_height, err := getImageDimension(source_image)
-						// if err != nil {
-						// 	return err
-						// }
-						resized_image = resize.Thumbnail(uint(width), uint(height), img, resize.Lanczos3)
+						img_width, img_height, err := getImageDimensions(source_image)
+						if err != nil {
+							return err
+						}
+
+						img_ratio := float64(img_width) / float64(img_height)
+
+						thumb_ratio := float64(width) / float64(height)
+
+						resize_width := uint(width)
+						resize_height := uint(height)
+
+						if img_ratio > thumb_ratio{
+							resize_width = uint(img_width * 5)
+						} else {
+							resize_height = uint(img_height * 5)
+						}
+
+						image := resize.Thumbnail(resize_width, resize_height, img, resize.Lanczos3)
+
+						resized_image, err = cutter.Crop(image, cutter.Config{
+							Width: width,
+							Height: height,
+						})
+						if err != nil {
+							return err
+						}
+
 					} else {
 						resized_image = resize.Thumbnail(uint(width), uint(height), img, resize.Lanczos3)
 					}
