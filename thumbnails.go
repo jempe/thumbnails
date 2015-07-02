@@ -36,6 +36,7 @@ func Config(file string) (err error) {
 // Generate thumbnails
 // if image is empty generate all thumbnails
 func Generate(image string, overwrite bool) (err error) {
+	viper.SetDefault("jpeg_quality", 85)
 	err = viper.ReadInConfig()
 	if err != nil {
 		return err
@@ -67,7 +68,7 @@ func Generate(image string, overwrite bool) (err error) {
 		image_file_path := folder_path + "/" + image
 		if exists(image_file_path) {
 			if isImage(image_file_path) {
-				err = generateThumbnail(image_file_path, overwrite)
+				err = generateThumbnail(image, overwrite)
 				if err != nil {
 					return err
 				}
@@ -183,12 +184,14 @@ func generateThumbnail(image_file string, overwrite bool) error {
 					defer out.Close()
 
 					if mime == "image/jpeg" {
-						jpeg.Encode(out, resized_image, nil)
+						var jpeg_opt jpeg.Options
+						jpeg_opt.Quality = viper.GetInt("jpeg_quality")
+						jpeg.Encode(out, resized_image, &jpeg_opt)
 					} else if mime == "image/gif" {
-						var opt gif.Options
-						opt.NumColors = 256
+						var gif_opt gif.Options
+						gif_opt.NumColors = 256
 
-						gif.Encode(out, resized_image, &opt)
+						gif.Encode(out, resized_image, &gif_opt)
 					} else if mime == "image/png" {
 						png.Encode(out, resized_image)
 					}
