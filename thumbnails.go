@@ -24,7 +24,7 @@ var thumbs_path string
 var thumb_sizes map[string]string
 
 func Config(file string) (err error) {
-	if exists(file) {
+	if Exists(file) {
 		viper.SetConfigFile(file)
 	} else {
 		err = errors.New("Config file doesn't exists")
@@ -46,10 +46,10 @@ func Generate(image string, overwrite bool) (err error) {
 	thumbs_path = strings.TrimRight(viper.GetString("thumbs_folder"), "/")
 	thumb_sizes = viper.GetStringMapString("sizes")
 
-	if !exists(folder_path) {
+	if !Exists(folder_path) {
 		err = errors.New("Images folder doesn't exists")
 		return err
-	} else if !isDirectory(folder_path) {
+	} else if !IsDirectory(folder_path) {
 		err = errors.New("Images folder is not a directory")
 		return err
 	}
@@ -57,7 +57,7 @@ func Generate(image string, overwrite bool) (err error) {
 	if image == "" {
 		images, _ := ioutil.ReadDir(folder_path)
 		for _, f := range images {
-			if isImage(folder_path + "/" + f.Name()) {
+			if IsImage(folder_path + "/" + f.Name()) {
 				err = generateThumbnail(f.Name(), overwrite)
 				if err != nil {
 					return err
@@ -66,8 +66,8 @@ func Generate(image string, overwrite bool) (err error) {
 		}
 	} else {
 		image_file_path := folder_path + "/" + image
-		if exists(image_file_path) {
-			if isImage(image_file_path) {
+		if Exists(image_file_path) {
+			if IsImage(image_file_path) {
 				err = generateThumbnail(image, overwrite)
 				if err != nil {
 					return err
@@ -86,7 +86,7 @@ func Generate(image string, overwrite bool) (err error) {
 // generate one thumbnail
 func generateThumbnail(image_file string, overwrite bool) error {
 	var err error
-	if isDirectory(thumbs_path) {
+	if IsDirectory(thumbs_path) {
 		source_image := folder_path + "/" + image_file
 
 		mime, err := getContentType(source_image)
@@ -96,7 +96,7 @@ func generateThumbnail(image_file string, overwrite bool) error {
 
 		for thumb_folder, thumb_size := range thumb_sizes {
 			thumb_folder_path := thumbs_path + "/" + thumb_folder
-			if !exists(thumb_folder_path) {
+			if !Exists(thumb_folder_path) {
 				log.Println("Creating folder" + thumb_folder_path)
 				err := os.Mkdir(thumb_folder_path, 0755)
 				if err != nil {
@@ -104,7 +104,7 @@ func generateThumbnail(image_file string, overwrite bool) error {
 				}
 			}
 
-			if isDirectory(thumb_folder_path) {
+			if IsDirectory(thumb_folder_path) {
 				thumb_file_path := thumb_folder_path + "/" + image_file
 
 				width, height, exact_size, err := parseSize(thumb_size)
@@ -112,7 +112,7 @@ func generateThumbnail(image_file string, overwrite bool) error {
 					return err
 				}
 
-				if exists(thumb_file_path) && overwrite == false {
+				if Exists(thumb_file_path) && overwrite == false {
 					log.Printf("Nothing to do, thumb %s already exists\n", thumb_file_path)
 				} else {
 					var img image.Image
@@ -228,7 +228,7 @@ func getImageDimensions(imagePath string) (width int, height int, err error) {
 	return
 }
 
-func copyImage(image string, thumb_file string) error {
+func CopyImage(image string, thumb_file string) error {
 	log.Println("copy " + image + " to " + thumb_file)
 	reader, err := os.Open(image)
 	if err != nil {
@@ -281,7 +281,7 @@ func parseSize(size_string string) (crop_width int, crop_height int, exact bool,
 }
 
 // check if file is an image
-func isImage(image_path string) bool {
+func IsImage(image_path string) bool {
 	mime, err := getContentType(image_path)
 
 	if err != nil {
@@ -313,7 +313,7 @@ func getContentType(path string) (mime string, err error) {
 	return mime, err
 }
 
-func isDirectory(path string) bool {
+func IsDirectory(path string) bool {
 	fileInfo, err := os.Stat(path)
 	if err == nil && fileInfo.IsDir() {
 		return true
@@ -323,7 +323,7 @@ func isDirectory(path string) bool {
 }
 
 // check if file exists
-func exists(file string) bool {
+func Exists(file string) bool {
 	if _, err := os.Stat(file); err == nil {
 		return true
 	} else {
