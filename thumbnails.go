@@ -2,8 +2,8 @@ package thumbnails
 
 import (
 	"errors"
-	"github.com/oliamb/cutter"
 	"github.com/nfnt/resize"
+	"github.com/oliamb/cutter"
 	"github.com/spf13/viper"
 	"image"
 	"image/gif"
@@ -14,6 +14,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -37,6 +39,7 @@ func Config(file string) (err error) {
 // if image is empty generate all thumbnails
 func Generate(image string, overwrite bool) (err error) {
 	viper.SetDefault("jpeg_quality", 85)
+	viper.SetDefault("webp", false)
 	err = viper.ReadInConfig()
 	if err != nil {
 		return err
@@ -156,7 +159,7 @@ func generateThumbnail(image_file string, overwrite bool) error {
 						resize_width := uint(width)
 						resize_height := uint(height)
 
-						if img_ratio > thumb_ratio{
+						if img_ratio > thumb_ratio {
 							resize_width = uint(img_width * 5)
 						} else {
 							resize_height = uint(img_height * 5)
@@ -165,7 +168,7 @@ func generateThumbnail(image_file string, overwrite bool) error {
 						image := resize.Thumbnail(resize_width, resize_height, img, resize.Lanczos3)
 
 						resized_image, err = cutter.Crop(image, cutter.Config{
-							Width: width,
+							Width:  width,
 							Height: height,
 						})
 						if err != nil {
@@ -194,6 +197,19 @@ func generateThumbnail(image_file string, overwrite bool) error {
 						gif.Encode(out, resized_image, &gif_opt)
 					} else if mime == "image/png" {
 						png.Encode(out, resized_image)
+					}
+
+					if viper.GetBool("webp") {
+						fileExt := filepath.Ext(image_file)
+
+						webpFilePath := thumb_folder_path + "/" + strings.TrimSuffix(image_file, fileExt) + ".webp"
+
+						cmd := exec.Command("cwebp", "-q", "80", thumb_file_path, "-o", webpFilePath)
+
+						err := cmd.Run()
+						if err != nil {
+							log.Println(err)
+						}
 					}
 				}
 			} else {
