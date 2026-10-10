@@ -1,10 +1,8 @@
 package thumbnails
 
 import (
+	"encoding/json"
 	"errors"
-	"github.com/nfnt/resize"
-	"github.com/oliamb/cutter"
-	"github.com/spf13/viper"
 	"image"
 	"image/gif"
 	"image/jpeg"
@@ -14,20 +12,34 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 )
 
+type config struct {
+	ImagesFolder string            `json:"images_folder"`
+	ThumbsFolder string            `json:"thumbs_folder"`
+	WebpQuality  float32           `json:"webp_quality"`
+	Sizes        map[string]string `json:"sizes"`
+}
+
 var configFile string
 var folder_path string
 var thumbs_path string
 var thumb_sizes map[string]string
+var webp_quality float32
+
+// suffix added to the thumbnail name to avoid collisions between files with the same name and different type
+var mime_suffixes = map[string]string{
+	"image/gif":  "_g",
+	"image/jpeg": "_j",
+	"image/png":  "_p",
+}
 
 func Config(file string) (err error) {
 	if Exists(file) {
-		viper.SetConfigFile(file)
+		configFile = file
 	} else {
 		err = errors.New("Config file doesn't exists")
 	}
@@ -38,16 +50,25 @@ func Config(file string) (err error) {
 // Generate thumbnails
 // if image is empty generate all thumbnails
 func Generate(image string, overwrite bool) (err error) {
-	viper.SetDefault("jpeg_quality", 85)
-	viper.SetDefault("webp", false)
-	err = viper.ReadInConfig()
+	if configFile == "" {
+		return errors.New("Config file not set")
+	}
+
+	config_content, err := os.ReadFile(configFile)
 	if err != nil {
 		return err
 	}
 
-	folder_path = strings.TrimRight(viper.GetString("images_folder"), "/")
-	thumbs_path = strings.TrimRight(viper.GetString("thumbs_folder"), "/")
-	thumb_sizes = viper.GetStringMapString("sizes")
+	conf := config{WebpQuality: 80}
+	err = json.Unmarshal(config_content, &conf)
+	if err != nil {
+		return err
+	}
+
+	folder_path = strings.TrimRight(conf.ImagesFolder, "/")
+	thumbs_path = strings.TrimRight(conf.ThumbsFolder, "/")
+	thumb_sizes = conf.Sizes
+	webp_quality = conf.WebpQuality
 
 	if !Exists(folder_path) {
 		err = errors.New("Images folder doesn't exists")
@@ -86,162 +107,104 @@ func Generate(image string, overwrite bool) (err error) {
 	return err
 }
 
-// generate one thumbnail
+// generate one thumbnail for each configured size, all of them in webp format
 func generateThumbnail(image_file string, overwrite bool) error {
-	var err error
-	if IsDirectory(thumbs_path) {
-		source_image := folder_path + "/" + image_file
+	if !IsDirectory(thumbs_path) {
+		return errors.New("Thumbs folder doesn't exist or is not a Folder")
+	}
 
-		mime, err := getContentType(source_image)
+	source_image := folder_path + "/" + image_file
+
+	mime, err := getContentType(source_image)
+	if err != nil {
+		return err
+	}
+
+	thumb_name := strings.TrimSuffix(image_file, filepath.Ext(image_file)) + mime_suffixes[mime] + ".webp"
+
+	var img image.Image
+
+	for thumb_folder, thumb_size := range thumb_sizes {
+		thumb_folder_path := thumbs_path + "/" + thumb_folder
+		if !Exists(thumb_folder_path) {
+			log.Println("Creating folder" + thumb_folder_path)
+			err := os.Mkdir(thumb_folder_path, 0755)
+			if err != nil {
+				return err
+			}
+		}
+
+		if !IsDirectory(thumb_folder_path) {
+			return errors.New("Can't create thumbnails. " + thumb_folder_path + " must be a directory")
+		}
+
+		thumb_file_path := thumb_folder_path + "/" + thumb_name
+
+		width, height, exact_size, err := parseSize(thumb_size)
 		if err != nil {
 			return err
 		}
 
-		for thumb_folder, thumb_size := range thumb_sizes {
-			thumb_folder_path := thumbs_path + "/" + thumb_folder
-			if !Exists(thumb_folder_path) {
-				log.Println("Creating folder" + thumb_folder_path)
-				err := os.Mkdir(thumb_folder_path, 0755)
-				if err != nil {
-					return err
-				}
-			}
+		if Exists(thumb_file_path) && !overwrite {
+			log.Printf("Nothing to do, thumb %s already exists\n", thumb_file_path)
+			continue
+		}
 
-			if IsDirectory(thumb_folder_path) {
-				thumb_file_path := thumb_folder_path + "/" + image_file
-
-				width, height, exact_size, err := parseSize(thumb_size)
-				if err != nil {
-					return err
-				}
-
-				if Exists(thumb_file_path) && overwrite == false {
-					log.Printf("Nothing to do, thumb %s already exists\n", thumb_file_path)
-				} else {
-					var img image.Image
-
-					file, err := os.Open(source_image)
-					if err != nil {
-						return err
-					}
-
-					if mime == "image/jpeg" {
-						img, err = jpeg.Decode(file)
-						if err != nil {
-							return err
-						}
-					} else if mime == "image/gif" {
-						img, err = gif.Decode(file)
-						if err != nil {
-							return err
-						}
-					} else if mime == "image/png" {
-						img, err = png.Decode(file)
-						if err != nil {
-							return err
-						}
-					}
-
-					file.Close()
-
-					var resized_image image.Image
-
-					if exact_size {
-						img_width, img_height, err := getImageDimensions(source_image)
-						if err != nil {
-							return err
-						}
-
-						img_ratio := float64(img_width) / float64(img_height)
-
-						thumb_ratio := float64(width) / float64(height)
-
-						resize_width := uint(width)
-						resize_height := uint(height)
-
-						if img_ratio > thumb_ratio {
-							resize_width = uint(img_width * 5)
-						} else {
-							resize_height = uint(img_height * 5)
-						}
-
-						image := resize.Thumbnail(resize_width, resize_height, img, resize.Lanczos3)
-
-						resized_image, err = cutter.Crop(image, cutter.Config{
-							Width:  width,
-							Height: height,
-						})
-						if err != nil {
-							return err
-						}
-
-					} else {
-						resized_image = resize.Thumbnail(uint(width), uint(height), img, resize.Lanczos3)
-					}
-
-					out, err := os.Create(thumb_file_path)
-					if err != nil {
-						return err
-					}
-
-					defer out.Close()
-
-					if mime == "image/jpeg" {
-						var jpeg_opt jpeg.Options
-						jpeg_opt.Quality = viper.GetInt("jpeg_quality")
-						jpeg.Encode(out, resized_image, &jpeg_opt)
-					} else if mime == "image/gif" {
-						var gif_opt gif.Options
-						gif_opt.NumColors = 256
-
-						gif.Encode(out, resized_image, &gif_opt)
-					} else if mime == "image/png" {
-						png.Encode(out, resized_image)
-					}
-
-					if viper.GetBool("webp") {
-						fileExt := filepath.Ext(image_file)
-
-						webpFilePath := thumb_folder_path + "/" + strings.TrimSuffix(image_file, fileExt) + ".webp"
-
-						cmd := exec.Command("cwebp", "-q", "80", thumb_file_path, "-o", webpFilePath)
-
-						err := cmd.Run()
-						if err != nil {
-							log.Println(err)
-						}
-					}
-				}
-			} else {
-				return errors.New("Can't create thumbnails. " + thumb_folder_path + " must be a directory")
+		if img == nil {
+			img, err = decodeImage(source_image, mime)
+			if err != nil {
+				return err
 			}
 		}
-	} else {
-		return errors.New("Thumbs folder doesn't exist or is not a Folder")
+
+		var resized_image image.Image
+
+		if exact_size {
+			resized_image = coverResize(img, width, height)
+		} else {
+			resized_image = fitResize(img, width, height)
+		}
+
+		err = writeWebp(thumb_file_path, resized_image)
+		if err != nil {
+			return err
+		}
 	}
 
-	return err
+	return nil
 }
 
-func getImageDimensions(imagePath string) (width int, height int, err error) {
-	file, file_err := os.Open(imagePath)
-	if file_err != nil {
-		err = file_err
-		return
+// decode an image file of one of the supported types
+func decodeImage(path string, mime string) (img image.Image, err error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
 	}
 
 	defer file.Close()
 
-	image, _, image_err := image.DecodeConfig(file)
-	if image_err != nil {
-		err = image_err
-		return
+	switch mime {
+	case "image/jpeg":
+		img, err = jpeg.Decode(file)
+	case "image/gif":
+		img, err = gif.Decode(file)
+	case "image/png":
+		img, err = png.Decode(file)
+	default:
+		err = errors.New("Unsupported image type: " + mime)
 	}
 
-	width = image.Width
-	height = image.Height
+	return img, err
+}
 
-	return
+// encode an image as webp and save it in path
+func writeWebp(path string, img image.Image) error {
+	data, err := encodeWebp(img, webp_quality)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(path, data, 0644)
 }
 
 func CopyImage(image string, thumb_file string) error {
@@ -276,14 +239,14 @@ func parseSize(size_string string) (crop_width int, crop_height int, exact bool,
 		width_height := strings.Split(strings.TrimLeft(size_string, "<="), "x")
 
 		crop_width, err = strconv.Atoi(width_height[0])
-		if err != nil {
-			err = errors.New("width must be an integer")
+		if err != nil || crop_width < 1 {
+			err = errors.New("width must be a positive integer")
 			return
 		}
 
 		crop_height, err = strconv.Atoi(width_height[1])
-		if err != nil {
-			err = errors.New("height must be an integer")
+		if err != nil || crop_height < 1 {
+			err = errors.New("height must be a positive integer")
 			return
 		}
 
@@ -318,13 +281,15 @@ func getContentType(path string) (mime string, err error) {
 		return mime, err
 	}
 
+	defer file.Close()
+
 	file_buffer := make([]byte, 512)
-	_, err = file.Read(file_buffer)
+	n, err := file.Read(file_buffer)
 	if err != nil {
 		return mime, err
 	}
 
-	mime = http.DetectContentType(file_buffer)
+	mime = http.DetectContentType(file_buffer[:n])
 
 	return mime, err
 }

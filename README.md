@@ -27,19 +27,54 @@ To generate thumbnails using a configuration file and an image file, run the fol
 go run cmd/gothumbnails/main.go -config=path/to/thumbnails.json -image=path/to/image.jpg
 ```
 
+## Requirements
+
+All thumbnails are WebP files, encoded with libwebp through cgo. You need a C compiler and the libwebp headers and library:
+
+```sh
+brew install webp              # macOS (Homebrew)
+sudo port install webp         # macOS (MacPorts)
+apt install libwebp-dev        # Debian/Ubuntu
+```
+
+The cgo flags in `webp.go` already look in the Homebrew locations (`/opt/homebrew`, `/usr/local`). MacPorts installs into `/opt/local`, so tell cgo where to find it when you build, test or run:
+
+```sh
+export CGO_CFLAGS="-I/opt/local/include"
+export CGO_LDFLAGS="-L/opt/local/lib"
+go build ./...
+```
+
 ## Configuration
 
-The configuration file should be a JSON file that specifies the settings for generating thumbnails. Here is an example of what the configuration file might look like:
+The configuration file is a JSON file:
 
 ```json
 {
-    "thumbnail_sizes": [
-        {"width": 100, "height": 100},
-        {"width": 200, "height": 200}
-    ],
-    "output_directory": "thumbnails"
+  "images_folder": "images",
+  "thumbs_folder": "images/thumbs",
+  "webp_quality": 80,
+  "sizes": {
+    "300w": "<300x300",
+    "square": "=200x200"
+  }
 }
 ```
+
+- `images_folder`: folder with the original JPEG, PNG and GIF images.
+- `thumbs_folder`: folder where one subfolder per size is created.
+- `webp_quality`: WebP quality from 0 to 100 (default 80).
+- `sizes`: map of folder name to size. `<WxH` fits the image inside WxH without upscaling, `=WxH` crops the center of the image and scales it to exactly WxH.
+
+## Output names
+
+Every thumbnail is a `.webp` file. A suffix based on the type of the original image avoids collisions between files with the same name:
+
+| Original | Thumbnail |
+|---|---|
+| `photo.gif` | `photo_g.webp` |
+| `photo.jpg` | `photo_j.webp` |
+| `photo.png` | `photo_p.webp` |
 
 ## Error Handling
 

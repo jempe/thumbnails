@@ -1,8 +1,7 @@
 {
   "images_folder" : "images",
   "thumbs_folder" : "images/thumbs",
-  "jpeg_quality" : 85,
-  "webp" : true,
+  "webp_quality" : 80,
   "sizes" : {
     "1500w" : "<1500x1500",
     "1080w" : "<1080x1080",
