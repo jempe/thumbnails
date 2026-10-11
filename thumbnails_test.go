@@ -41,6 +41,14 @@ func TestGenerateWebp(t *testing.T) {
 	save("a.jpg", func(f *os.File) error { return jpeg.Encode(f, src, nil) })
 	save("a.png", func(f *os.File) error { return png.Encode(f, src) })
 	save("a.gif", func(f *os.File) error { return gif.Encode(f, src, nil) })
+	save("a.webp", func(f *os.File) error {
+		data, err := encodeWebp(src, 90)
+		if err != nil {
+			return err
+		}
+		_, err = f.Write(data)
+		return err
+	})
 
 	conf, _ := json.Marshal(map[string]any{
 		"images_folder": images,
@@ -62,7 +70,7 @@ func TestGenerateWebp(t *testing.T) {
 	expected := map[string][2]int{"fit": {100, 50}, "exact": {60, 60}, "big": {400, 200}}
 
 	for folder, size := range expected {
-		for _, name := range []string{"a_j.webp", "a_p.webp", "a_g.webp"} {
+		for _, name := range []string{"a_j.webp", "a_p.webp", "a_g.webp", "a_w.webp"} {
 			path := filepath.Join(thumbs, folder, name)
 			data, err := os.ReadFile(path)
 			if err != nil {

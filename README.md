@@ -61,7 +61,7 @@ The configuration file is a JSON file:
 }
 ```
 
-- `images_folder`: folder with the original JPEG, PNG and GIF images.
+- `images_folder`: folder with the original JPEG, PNG, GIF and WebP images.
 - `thumbs_folder`: folder where one subfolder per size is created.
 - `webp_quality`: WebP quality from 0 to 100 (default 80).
 - `sizes`: map of folder name to size. `<WxH` fits the image inside WxH without upscaling, `=WxH` crops the center of the image and scales it to exactly WxH.
@@ -75,6 +75,9 @@ Every thumbnail is a `.webp` file. A suffix based on the type of the original im
 | `photo.gif` | `photo_g.webp` |
 | `photo.jpg` | `photo_j.webp` |
 | `photo.png` | `photo_p.webp` |
+| `photo.webp` | `photo_w.webp` |
+
+Animated WebP files can't be decoded and produce an error.
 
 ## Error Handling
 

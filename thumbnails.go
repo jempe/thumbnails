@@ -3,6 +3,7 @@ package thumbnails
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/gif"
 	"image/jpeg"
@@ -15,6 +16,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	xwebp "golang.org/x/image/webp"
 )
 
 type config struct {
@@ -35,13 +38,14 @@ var mime_suffixes = map[string]string{
 	"image/gif":  "_g",
 	"image/jpeg": "_j",
 	"image/png":  "_p",
+	"image/webp": "_w",
 }
 
 func Config(file string) (err error) {
 	if Exists(file) {
 		configFile = file
 	} else {
-		err = errors.New("Config file doesn't exists")
+		err = fmt.Errorf("Config file %s doesn't exists", fullPath(file))
 	}
 
 	return err
@@ -71,10 +75,10 @@ func Generate(image string, overwrite bool) (err error) {
 	webp_quality = conf.WebpQuality
 
 	if !Exists(folder_path) {
-		err = errors.New("Images folder doesn't exists")
+		err = fmt.Errorf("Images folder %s doesn't exists", fullPath(folder_path))
 		return err
 	} else if !IsDirectory(folder_path) {
-		err = errors.New("Images folder is not a directory")
+		err = fmt.Errorf("Images folder %s is not a directory", fullPath(folder_path))
 		return err
 	}
 
@@ -97,10 +101,10 @@ func Generate(image string, overwrite bool) (err error) {
 					return err
 				}
 			} else {
-				return errors.New("That file is not an image")
+				return fmt.Errorf("File %s is not an image", fullPath(image_file_path))
 			}
 		} else {
-			return errors.New("That file doesn't exist")
+			return fmt.Errorf("File %s doesn't exist", fullPath(image_file_path))
 		}
 	}
 
@@ -110,7 +114,7 @@ func Generate(image string, overwrite bool) (err error) {
 // generate one thumbnail for each configured size, all of them in webp format
 func generateThumbnail(image_file string, overwrite bool) error {
 	if !IsDirectory(thumbs_path) {
-		return errors.New("Thumbs folder doesn't exist or is not a Folder")
+		return fmt.Errorf("Thumbs folder %s doesn't exist or is not a Folder", fullPath(thumbs_path))
 	}
 
 	source_image := folder_path + "/" + image_file
@@ -135,7 +139,7 @@ func generateThumbnail(image_file string, overwrite bool) error {
 		}
 
 		if !IsDirectory(thumb_folder_path) {
-			return errors.New("Can't create thumbnails. " + thumb_folder_path + " must be a directory")
+			return fmt.Errorf("Can't create thumbnails. %s must be a directory", fullPath(thumb_folder_path))
 		}
 
 		thumb_file_path := thumb_folder_path + "/" + thumb_name
@@ -190,6 +194,8 @@ func decodeImage(path string, mime string) (img image.Image, err error) {
 		img, err = gif.Decode(file)
 	case "image/png":
 		img, err = png.Decode(file)
+	case "image/webp":
+		img, err = xwebp.Decode(file)
 	default:
 		err = errors.New("Unsupported image type: " + mime)
 	}
@@ -266,11 +272,8 @@ func IsImage(image_path string) bool {
 	if err != nil {
 		return false
 	} else {
-		if mime == "image/gif" || mime == "image/jpeg" || mime == "image/png" {
-			return true
-		} else {
-			return false
-		}
+		_, supported := mime_suffixes[mime]
+		return supported
 	}
 }
 
@@ -301,6 +304,16 @@ func IsDirectory(path string) bool {
 	} else {
 		return false
 	}
+}
+
+// get the absolute path of a file or folder to show it in error messages
+func fullPath(path string) string {
+	abs_path, err := filepath.Abs(path)
+	if err != nil {
+		return path
+	}
+
+	return abs_path
 }
 
 // check if file exists
